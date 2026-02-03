@@ -442,7 +442,7 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
             .builtin_deref(false)
             .unwrap()
             .sequence_element_type(self.tcx.tcx);
-        
+
         // Create an array with as many elements as the number of fields in the struct
         let fields_layout =
             self.layout_of(Ty::new_array(self.tcx.tcx, field_type, variant.fields.len() as u64))?;
