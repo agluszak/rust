@@ -209,8 +209,7 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
 
         while let Some((i, place)) = fields_places.next(self)? {
             let field_ty = fields[i as usize];
-            // For tuples, field name is None
-            self.write_field_with_name(None, field_ty, place, tuple_layout, i)?;
+            self.write_tuple_field(field_ty, place, tuple_layout, i)?;
         }
 
         let fields_place = fields_place.map_provenance(CtfeProvenance::as_immutable);
@@ -220,9 +219,8 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
         self.write_immediate(ptr, &fields_slice_place)
     }
 
-    fn write_field_with_name(
+    fn write_tuple_field(
         &mut self,
-        field_name: Option<&str>,
         field_ty: Ty<'tcx>,
         place: MPlaceTy<'tcx>,
         layout: TyAndLayout<'tcx>,
@@ -233,20 +231,6 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
         {
             let field_place = self.project_field(&place, field_idx)?;
             match field_ty_field.name {
-                sym::name => {
-                    // Write field name as Option<&'static str>
-                    if let Some(name) = field_name {
-                        // Write Some(name) for named fields
-                        let (some_variant, some_place) = self.downcast_option(sym::Some, &field_place)?;
-                        let str_place = self.project_field(&some_place, FieldIdx::ZERO)?;
-                        self.write_str_slice(&str_place, name)?;
-                        self.write_discriminant(some_variant, &field_place)?;
-                    } else {
-                        // Write None for tuple fields
-                        let (none_variant, _) = self.downcast_option(sym::None, &field_place)?;
-                        self.write_discriminant(none_variant, &field_place)?;
-                    }
-                }
                 sym::ty => self.write_type_id(field_ty, &field_place)?,
                 sym::offset => {
                     let offset = layout.fields.offset(idx as usize);
@@ -258,7 +242,37 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
                 other => {
                     span_bug!(self.tcx.def_span(field_ty_field.did), "unimplemented field {other}")
                 }
+            }
+        }
+        interp_ok(())
+    }
+
+    fn write_named_field(
+        &mut self,
+        field_name: &str,
+        field_ty: Ty<'tcx>,
+        place: MPlaceTy<'tcx>,
+        layout: TyAndLayout<'tcx>,
+        idx: u64,
+    ) -> InterpResult<'tcx> {
+        for (field_idx, field_ty_field) in
+            place.layout.ty.ty_adt_def().unwrap().non_enum_variant().fields.iter_enumerated()
+        {
+            let field_place = self.project_field(&place, field_idx)?;
+            match field_ty_field.name {
+                sym::name => {
+                    self.write_str_slice(&field_place, field_name)?;
                 }
+                sym::ty => self.write_type_id(field_ty, &field_place)?,
+                sym::offset => {
+                    let offset = layout.fields.offset(idx as usize);
+                    self.write_scalar(
+                        ScalarInt::try_from_target_usize(offset.bytes(), self.tcx.tcx).unwrap(),
+                        &field_place,
+                    )?;
+                }
+                other => {
+                    span_bug!(self.tcx.def_span(field_ty_field.did), "unimplemented field {other}")
                 }
             }
         }
@@ -457,21 +471,6 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
         interp_ok((variant_id, self.project_downcast(field_dest, variant_id)?))
     }
 
-    fn downcast_option(
-        &mut self,
-        name: Symbol,
-        field_dest: &impl Writeable<'tcx, CtfeProvenance>,
-    ) -> InterpResult<'tcx, (ty::VariantIdx, MPlaceTy<'tcx>)> {
-        let variants = field_dest.layout().ty.ty_adt_def().unwrap().variants();
-        let variant_id = variants
-            .iter_enumerated()
-            .find(|(_idx, var)| var.name == name)
-            .unwrap_or_else(|| panic!("got {name} but expected one of {variants:#?}"))
-            .0;
-
-        interp_ok((variant_id, self.project_downcast(field_dest, variant_id)?))
-    }
-
     fn write_str_slice(
         &mut self,
         place: &impl Writeable<'tcx, CtfeProvenance>,
@@ -501,30 +500,31 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
     ) -> InterpResult<'tcx> {
         let variant = def.non_enum_variant();
 
-        // Iterate over all fields of `type_info::Struct`.
-        for (field_idx, field) in
-            place.layout().ty.ty_adt_def().unwrap().non_enum_variant().fields.iter_enumerated()
-        {
-            let field_place = self.project_field(&place, field_idx)?;
+        // Determine struct kind and write it
+        let struct_kind_variant = if variant.fields.is_empty() {
+            sym::Unit
+        } else if variant.ctor_kind() == Some(rustc_hir::def::CtorKind::Fn) {
+            sym::Tuple
+        } else {
+            sym::Named
+        };
 
-            match field.name {
-                sym::kind => {
-                    let struct_kind_variant = if variant.fields.is_empty() {
-                        sym::Unit
-                    } else if variant.ctor_kind() == Some(rustc_hir::def::CtorKind::Fn) {
-                        sym::Tuple
-                    } else {
-                        sym::Named
-                    };
-                    let (variant_idx, _) = self.downcast_adt_kind(struct_kind_variant, &field_place)?;
-                    self.write_discriminant(variant_idx, &field_place)?;
-                }
-                sym::fields => {
-                    self.write_adt_fields(&field_place, ty, variant, args)?;
-                }
-                other => span_bug!(self.tcx.def_span(field.did), "unimplemented field {other}"),
+        let (variant_idx, variant_place) = self.downcast_adt_kind(struct_kind_variant, &place)?;
+        
+        // Write fields if not a unit struct
+        if !variant.fields.is_empty() {
+            let fields_place = self.project_field(&variant_place, FieldIdx::ZERO)?;
+            
+            if variant.ctor_kind() == Some(rustc_hir::def::CtorKind::Fn) {
+                // Tuple struct
+                self.write_tuple_fields_for_adt(&fields_place, ty, variant, args)?;
+            } else {
+                // Named struct
+                self.write_named_fields_for_adt(&fields_place, ty, variant, args)?;
             }
         }
+        
+        self.write_discriminant(variant_idx, &place)?;
 
         interp_ok(())
     }
@@ -570,7 +570,8 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
 
             match field.name {
                 sym::fields => {
-                    self.write_adt_fields(&field_place, ty, variant, args)?;
+                    // Unions always have named fields
+                    self.write_named_fields_for_adt(&field_place, ty, variant, args)?;
                 }
                 other => span_bug!(self.tcx.def_span(field.did), "unimplemented field {other}"),
             }
@@ -632,18 +633,31 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
                     self.write_str_slice(&field_place, variant_name)?;
                 }
                 sym::kind => {
-                    let variant_kind_variant = if variant.fields.is_empty() {
+                    // Determine variant kind
+                    let variant_kind_sym = if variant.fields.is_empty() {
                         sym::Unit
                     } else if variant.ctor_kind() == Some(rustc_hir::def::CtorKind::Fn) {
                         sym::Tuple
                     } else {
                         sym::Named
                     };
-                    let (variant_idx, _) = self.downcast_adt_kind(variant_kind_variant, &field_place)?;
+                    
+                    let (variant_idx, variant_kind_place) = self.downcast_adt_kind(variant_kind_sym, &field_place)?;
+                    
+                    // Write fields if not a unit variant
+                    if !variant.fields.is_empty() {
+                        let fields_place = self.project_field(&variant_kind_place, FieldIdx::ZERO)?;
+                        
+                        if variant.ctor_kind() == Some(rustc_hir::def::CtorKind::Fn) {
+                            // Tuple variant
+                            self.write_tuple_fields_for_adt(&fields_place, ty, variant, args)?;
+                        } else {
+                            // Named variant
+                            self.write_named_fields_for_adt(&fields_place, ty, variant, args)?;
+                        }
+                    }
+                    
                     self.write_discriminant(variant_idx, &field_place)?;
-                }
-                sym::fields => {
-                    self.write_adt_fields(&field_place, ty, variant, args)?;
                 }
                 other => span_bug!(self.tcx.def_span(field.did), "unimplemented field {other}"),
             }
@@ -652,14 +666,14 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
         interp_ok(())
     }
 
-    fn write_adt_fields(
+    fn write_tuple_fields_for_adt(
         &mut self,
         fields_slice_place: &impl Writeable<'tcx, CtfeProvenance>,
         ty: Ty<'tcx>,
         variant: &ty::VariantDef,
         args: ty::GenericArgsRef<'tcx>,
     ) -> InterpResult<'tcx> {
-        // get the `type_info::Field` type from `fields: &[Field]`
+        // get the `type_info::TupleField` type from `fields: &[TupleField]`
         let field_type = fields_slice_place
             .layout()
             .ty
@@ -667,7 +681,42 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
             .unwrap()
             .sequence_element_type(self.tcx.tcx);
 
-        // Create an array with as many elements as the number of fields in the struct
+        // Create an array with as many elements as the number of fields
+        let fields_layout =
+            self.layout_of(Ty::new_array(self.tcx.tcx, field_type, variant.fields.len() as u64))?;
+        let fields_place = self.allocate(fields_layout, MemoryKind::Stack)?;
+        let mut fields_places = self.project_array_fields(&fields_place)?;
+
+        let layout = self.layout_of(ty)?;
+
+        while let Some((i, place)) = fields_places.next(self)? {
+            let field_def = &variant.fields[i.into()];
+            let field_ty = field_def.ty(self.tcx.tcx, args);
+            self.write_tuple_field(field_ty, place, layout, i)?;
+        }
+
+        let fields_place = fields_place.map_provenance(CtfeProvenance::as_immutable);
+        let ptr = Immediate::new_slice(fields_place.ptr(), variant.fields.len() as u64, self);
+
+        self.write_immediate(ptr, fields_slice_place)
+    }
+
+    fn write_named_fields_for_adt(
+        &mut self,
+        fields_slice_place: &impl Writeable<'tcx, CtfeProvenance>,
+        ty: Ty<'tcx>,
+        variant: &ty::VariantDef,
+        args: ty::GenericArgsRef<'tcx>,
+    ) -> InterpResult<'tcx> {
+        // get the `type_info::NamedField` type from `fields: &[NamedField]`
+        let field_type = fields_slice_place
+            .layout()
+            .ty
+            .builtin_deref(false)
+            .unwrap()
+            .sequence_element_type(self.tcx.tcx);
+
+        // Create an array with as many elements as the number of fields
         let fields_layout =
             self.layout_of(Ty::new_array(self.tcx.tcx, field_type, variant.fields.len() as u64))?;
         let fields_place = self.allocate(fields_layout, MemoryKind::Stack)?;
@@ -679,10 +728,7 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
             let field_def = &variant.fields[i.into()];
             let field_ty = field_def.ty(self.tcx.tcx, args);
             let field_name = field_def.name.as_str();
-            // Check if this is a tuple field (numeric name like "0", "1", etc.)
-            let is_tuple_field = field_name.chars().all(|c| c.is_ascii_digit());
-            let name = if is_tuple_field { None } else { Some(field_name) };
-            self.write_field_with_name(name, field_ty, place, layout, i)?;
+            self.write_named_field(field_name, field_ty, place, layout, i)?;
         }
 
         let fields_place = fields_place.map_provenance(CtfeProvenance::as_immutable);

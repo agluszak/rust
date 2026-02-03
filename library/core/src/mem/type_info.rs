@@ -75,17 +75,27 @@ pub enum TypeKind {
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Tuple {
     /// All fields of a tuple.
-    pub fields: &'static [Field],
+    pub fields: &'static [TupleField],
 }
 
-/// Compile-time type information about fields of tuples, structs and enum variants.
+/// Compile-time type information about fields of tuples and tuple structs/variants.
 #[derive(Debug)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
-pub struct Field {
-    /// The field's name, if it has one (for named fields in structs/enum variants).
-    /// `None` for tuple fields and unnamed fields.
-    pub name: Option<&'static str>,
+pub struct TupleField {
+    /// The field's type.
+    pub ty: TypeId,
+    /// Offset in bytes from the parent type
+    pub offset: usize,
+}
+
+/// Compile-time type information about named fields in structs and enum variants.
+#[derive(Debug)]
+#[non_exhaustive]
+#[unstable(feature = "type_info", issue = "146922")]
+pub struct NamedField {
+    /// The field's name.
+    pub name: &'static str,
     /// The field's type.
     pub ty: TypeId,
     /// Offset in bytes from the parent type
@@ -223,7 +233,7 @@ pub struct Adt {
 #[unstable(feature = "type_info", issue = "146922")]
 pub enum AdtKind {
     /// A struct type.
-    Struct(Struct),
+    Struct(StructKind),
     /// An enum type.
     Enum(Enum),
     /// A union type.
@@ -234,24 +244,13 @@ pub enum AdtKind {
 #[derive(Debug)]
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
-pub struct Struct {
-    /// The kind of struct (unit, tuple, or named).
-    pub kind: StructKind,
-    /// All fields of the struct.
-    pub fields: &'static [Field],
-}
-
-/// The kind of struct.
-#[derive(Debug)]
-#[non_exhaustive]
-#[unstable(feature = "type_info", issue = "146922")]
 pub enum StructKind {
     /// A unit struct (e.g., `struct Unit;`).
     Unit,
     /// A tuple struct (e.g., `struct Tuple(u32, String);`).
-    Tuple,
+    Tuple(&'static [TupleField]),
     /// A struct with named fields (e.g., `struct Named { a: u32, b: String }`).
-    Named,
+    Named(&'static [NamedField]),
 }
 
 /// Compile-time type information about enums.
@@ -272,8 +271,6 @@ pub struct Variant {
     pub name: &'static str,
     /// The kind of variant.
     pub kind: VariantKind,
-    /// All fields of the variant.
-    pub fields: &'static [Field],
 }
 
 /// The kind of enum variant.
@@ -284,9 +281,9 @@ pub enum VariantKind {
     /// A unit variant (e.g., `None` in `Option`).
     Unit,
     /// A tuple variant (e.g., `Some(T)` in `Option`).
-    Tuple,
+    Tuple(&'static [TupleField]),
     /// A variant with named fields (e.g., `Point { x: i32, y: i32 }`).
-    Named,
+    Named(&'static [NamedField]),
 }
 
 /// Compile-time type information about unions.
@@ -295,5 +292,5 @@ pub enum VariantKind {
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Union {
     /// All fields of the union.
-    pub fields: &'static [Field],
+    pub fields: &'static [NamedField],
 }
