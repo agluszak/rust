@@ -145,6 +145,7 @@ Type {
 Type {
     kind: Adt(
         Adt {
+            name: "dump::Foo",
             kind: Struct(
                 Named(
                     [
@@ -165,6 +166,7 @@ Type {
 Type {
     kind: Adt(
         Adt {
+            name: "dump::Bar",
             kind: Enum(
                 Enum {
                     variants: [
