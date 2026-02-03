@@ -83,6 +83,9 @@ pub struct Tuple {
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Field {
+    /// The field's name, if it has one (for named fields in structs/enum variants).
+    /// `None` for tuple fields and unnamed fields.
+    pub name: Option<&'static str>,
     /// The field's type.
     pub ty: TypeId,
     /// Offset in bytes from the parent type
@@ -265,6 +268,8 @@ pub struct Enum {
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Variant {
+    /// The name of the variant.
+    pub name: &'static str,
     /// The kind of variant.
     pub kind: VariantKind,
     /// All fields of the variant.
