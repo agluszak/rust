@@ -145,12 +145,17 @@ Type {
 Type {
     kind: Adt(
         Adt {
-            fields: [
-                Field {
-                    ty: TypeId(0x1fec01df1c0d7a80fb8f9fc8d5f8cce3),
-                    offset: 0,
+            kind: Struct(
+                Struct {
+                    kind: Named,
+                    fields: [
+                        Field {
+                            ty: TypeId(0x1fec01df1c0d7a80fb8f9fc8d5f8cce3),
+                            offset: 0,
+                        },
+                    ],
                 },
-            ],
+            ),
         },
     ),
     size: Some(
@@ -160,7 +165,38 @@ Type {
 Type {
     kind: Adt(
         Adt {
-            fields: [],
+            kind: Enum(
+                Enum {
+                    variants: [
+                        Variant {
+                            kind: Tuple,
+                            fields: [
+                                Field {
+                                    ty: TypeId(0x1fec01df1c0d7a80fb8f9fc8d5f8cce3),
+                                    offset: 4,
+                                },
+                            ],
+                        },
+                        Variant {
+                            kind: Unit,
+                            fields: [],
+                        },
+                        Variant {
+                            kind: Named,
+                            fields: [
+                                Field {
+                                    ty: TypeId(0x41223169ff28813ba79b7268a2a968d9),
+                                    offset: 4,
+                                },
+                                Field {
+                                    ty: TypeId(0x64aff5a28c4af9d610727d8bac8c7a33),
+                                    offset: 8,
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ),
         },
     ),
     size: Some(
