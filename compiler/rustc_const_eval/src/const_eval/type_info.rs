@@ -480,12 +480,12 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
         let str_ty = self.tcx.tcx.types.str_;
         let str_layout = self.layout_of(str_ty)?;
         let str_place = self.allocate_dyn(str_layout, MemoryKind::Stack, s.len())?;
-        
+
         // Write the string bytes
         self.write_bytes_ptr(str_place.ptr(), s.as_bytes().iter().copied())?;
-        
+
         let str_place = str_place.map_provenance(CtfeProvenance::as_immutable);
-        
+
         // Create the slice
         let ptr = Immediate::new_slice(str_place.ptr(), s.len() as u64, self);
         self.write_immediate(ptr, place)
@@ -510,11 +510,11 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
         };
 
         let (variant_idx, variant_place) = self.downcast_adt_kind(struct_kind_variant, &place)?;
-        
+
         // Write fields if not a unit struct
         if !variant.fields.is_empty() {
             let fields_place = self.project_field(&variant_place, FieldIdx::ZERO)?;
-            
+
             if variant.ctor_kind() == Some(rustc_hir::def::CtorKind::Fn) {
                 // Tuple struct
                 self.write_tuple_fields_for_adt(&fields_place, ty, variant, args)?;
@@ -523,7 +523,7 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
                 self.write_named_fields_for_adt(&fields_place, ty, variant, args)?;
             }
         }
-        
+
         self.write_discriminant(variant_idx, &place)?;
 
         interp_ok(())
@@ -594,7 +594,7 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
             .builtin_deref(false)
             .unwrap()
             .sequence_element_type(self.tcx.tcx);
-        
+
         // Create an array with as many elements as the number of variants in the enum
         let variants_layout =
             self.layout_of(Ty::new_array(self.tcx.tcx, variant_type, def.variants().len() as u64))?;
@@ -641,13 +641,13 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
                     } else {
                         sym::Named
                     };
-                    
+
                     let (variant_idx, variant_kind_place) = self.downcast_adt_kind(variant_kind_sym, &field_place)?;
-                    
+
                     // Write fields if not a unit variant
                     if !variant.fields.is_empty() {
                         let fields_place = self.project_field(&variant_kind_place, FieldIdx::ZERO)?;
-                        
+
                         if variant.ctor_kind() == Some(rustc_hir::def::CtorKind::Fn) {
                             // Tuple variant
                             self.write_tuple_fields_for_adt(&fields_place, ty, variant, args)?;
@@ -656,7 +656,7 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
                             self.write_named_fields_for_adt(&fields_place, ty, variant, args)?;
                         }
                     }
-                    
+
                     self.write_discriminant(variant_idx, &field_place)?;
                 }
                 other => span_bug!(self.tcx.def_span(field.did), "unimplemented field {other}"),
