@@ -431,6 +431,10 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
             let field_place = self.project_field(&place, field_idx)?;
 
             match field.name {
+                sym::name => {
+                    let adt_name = self.tcx.def_path_str(def.did());
+                    self.write_str_slice(&field_place, &adt_name)?;
+                }
                 sym::kind => {
                     if def.is_struct() {
                         let (variant, variant_place) = self.downcast_adt_kind(sym::Struct, &field_place)?;

@@ -223,6 +223,8 @@ pub struct Pointer {
 #[non_exhaustive]
 #[unstable(feature = "type_info", issue = "146922")]
 pub struct Adt {
+    /// The name of the ADT.
+    pub name: &'static str,
     /// The kind of ADT (struct, enum, or union).
     pub kind: AdtKind,
 }
