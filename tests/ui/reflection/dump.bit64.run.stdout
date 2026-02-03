@@ -143,13 +143,26 @@ Type {
     ),
 }
 Type {
-    kind: Other,
+    kind: Adt(
+        Adt {
+            fields: [
+                Field {
+                    ty: TypeId(0x1fec01df1c0d7a80fb8f9fc8d5f8cce3),
+                    offset: 0,
+                },
+            ],
+        },
+    ),
     size: Some(
         4,
     ),
 }
 Type {
-    kind: Other,
+    kind: Adt(
+        Adt {
+            fields: [],
+        },
+    ),
     size: Some(
         24,
     ),
