@@ -447,7 +447,7 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
         args: ty::GenericArgsRef<'tcx>,
     ) -> InterpResult<'tcx> {
         let variant = def.non_enum_variant();
-        
+
         // Iterate over all fields of `type_info::Struct`.
         for (field_idx, field) in
             place.layout().ty.ty_adt_def().unwrap().non_enum_variant().fields.iter_enumerated()
@@ -508,7 +508,7 @@ impl<'tcx> InterpCx<'tcx, CompileTimeMachine<'tcx>> {
         args: ty::GenericArgsRef<'tcx>,
     ) -> InterpResult<'tcx> {
         let variant = def.non_enum_variant();
-        
+
         // Iterate over all fields of `type_info::Union`.
         for (field_idx, field) in
             place.layout().ty.ty_adt_def().unwrap().non_enum_variant().fields.iter_enumerated()
