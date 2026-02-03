@@ -63,6 +63,8 @@ pub enum TypeKind {
     Reference(Reference),
     /// Pointers.
     Pointer(Pointer),
+    /// Algebraic Data Types (structs, enums, unions).
+    Adt(Adt),
     /// FIXME(#146922): add all the common types
     Other,
 }
@@ -201,4 +203,13 @@ pub struct Pointer {
     pub pointee: TypeId,
     /// Whether this pointer is mutable or not.
     pub mutable: bool,
+}
+
+/// Compile-time type information about ADTs (structs, enums, unions).
+#[derive(Debug)]
+#[non_exhaustive]
+#[unstable(feature = "type_info", issue = "146922")]
+pub struct Adt {
+    /// All fields of the ADT.
+    pub fields: &'static [Field],
 }

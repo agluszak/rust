@@ -157,6 +157,7 @@ symbols! {
         Abi,
         AcqRel,
         Acquire,
+        Adt,
         Any,
         Arc,
         ArcWeak,
